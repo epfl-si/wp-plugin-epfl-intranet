@@ -2,7 +2,7 @@
 /*
  * Plugin Name: EPFL Intranet
  * Description: Use EPFL Accred to allow website access only to specific group(s) or just force to be authenticated
- * Version:     0.17
+ * Version:     0.18
  * Author:      Lucien Chaboudez
  * Author URI:  mailto:lucien.chaboudez@epfl.ch
  */
@@ -93,6 +93,11 @@ class Settings extends \EPFL\SettingsBase
             }
         }
 
+        if ( defined( 'WP_CLI' ) && WP_CLI ) 
+        {
+            \WP_CLI::add_command('epfl intranet sync-htaccess', [get_called_class(), 'sync_htaccess' ]);
+        }
+
     }
 
     function show_plugin_status()
@@ -180,74 +185,109 @@ class Settings extends \EPFL\SettingsBase
 
   /*************************************************************************************************/
 
-   /*
-      BUT : Add/remove .htaccess content
-   */
-   function update_htaccess($insertion, $at_beginning=false)
-   {
+    /**
+     * Sync .htaccess file from saved status
+     */
+    function sync_htaccess()
+    {
+        // Getting current status
+        $enabled = trim($this->get('enabled'));
 
-      /* In the past, we were using get_home_path() func to have path to .htaccess file. BUT, with WordPress symlinking
-      functionality, get_home_path() returns path to WordPress images files = /wp/
-      So, to fix this, we access .htaccess file using WP_CONTENT_DIR which is defined in wp-config.php file. We just
-       have to remove 'wp-content' '*/
-      $filename = str_replace("wp-content", ".htaccess", WP_CONTENT_DIR);
+        //Trying to sync .htaccess file
+        if($this->validate_enabled($enabled, true) == $enabled)
+        {
+            \WP_CLI::success(".htaccess fild successfuly updated");
+        }
+        else
+        {
+            \WP_CLI::error("Error updating .htaccess file", true);
+        }
+    }
 
-      $marker = 'EPFL-Intranet';
+    /**
+     * Add/remove .htaccess content
+     */
+    function update_htaccess($insertion, $at_beginning=false)
+    {
 
-      return insert_with_markers($filename, $marker, $insertion);
+        /* In the past, we were using get_home_path() func to have path to .htaccess file. BUT, with WordPress symlinking
+        functionality, get_home_path() returns path to WordPress images files = /wp/
+        So, to fix this, we access .htaccess file using WP_CONTENT_DIR which is defined in wp-config.php file. We just
+        have to remove 'wp-content' '*/
+        $filename = str_replace("wp-content", ".htaccess", WP_CONTENT_DIR);
 
-   }
+        $marker = 'EPFL-Intranet';
+
+        return insert_with_markers($filename, $marker, $insertion);
+
+    }
+
+
+    /**
+        * Returns lines to add in .htaccess file
+        */
+    function htaccess_lines()
+    {
+        $lines = array();
+
+        $lines[] = "RewriteEngine On";
+        // if requested URL is in media folder,
+        $lines[] = "RewriteCond %{REQUEST_URI} wp-content/uploads/";
+
+        // We redirect on a file which will check if logged in (we add path to requested file as parameter
+        $lines[] = "RewriteRule wp-content/uploads/(.*)$ wp-content/plugins/epfl-intranet/inc/protect-medias.php?file=$1 [QSA,L]";
+
+        return $lines;
+    }
 
 
     /**
     * Validate activation/deactivation. In fact we just add things into .htaccess file to protect medias.
+    *
+    * @param String enabled: '0' or '1' to tell if we asked to activate or deactivate plugin
+    * @param Bool wp_cli_call: to tell if function is called with WPCLI or not
     */
-    function validate_enabled($enabled)
+    function validate_enabled($enabled, $wp_cli_call=false)
     {
+        /* Defining value to return in case of error in prerequisites/other. We just let it as it is...
+        If it's already activated, we let it activated (with current settings) to avoid any security issue.
+        If it's not activated, we don't activate it (because of errors) */
+        $enabled_in_case_of_error = trim($this->get('enabled'));
+        
         /* Website protection is enabled */
         if($enabled == '1')
         {
-            /* Defining value to return in case of error in prerequisites/other. We just let it as it is...
-             If it's already activated, we let it activated (with current settings) to avoid any security issue.
-             If it's not activated, we don't activate it (because of errors) */
-            $enabled_in_case_of_error = trim($this->get('enabled'));
 
             /* If prerequisite are not met, */
             if(!$this->check_prerequisites())
             {
-                $enabled = $enabled_in_case_of_error;
-
+                return $enabled_in_case_of_error;
             }
             else
             {
 
-               $lines = array();
+                $lines = $this->htaccess_lines();
 
-               $lines[] = "RewriteEngine On";
-               // if requested URL is in media folder,
-               $lines[] = "RewriteCond %{REQUEST_URI} wp-content/uploads/";
-
-               // We redirect on a file which will check if logged in (we add path to requested file as parameter
-               $lines[] = "RewriteRule wp-content/uploads/(.*)$ wp-content/plugins/epfl-intranet/inc/protect-medias.php?file=$1 [QSA,L]";
-               if($this->update_htaccess($lines, true)===false)
-               {
-                  add_settings_error('cannotUpdateHtAccess',
-                                  'empty',
-                                  ___("Impossible to update .htaccess file"),
-                                  'error');
-                  $enabled = $enabled_in_case_of_error;
-               }
              }
         }
         else /* We don't want to protect website */
         {
-           if($this->update_htaccess(array())===false)
-           {
-              add_settings_error('cannotUpdateHtAccess',
-                              'empty',
-                              ___("Impossible to update .htaccess file"),
-                              'error');
-           }
+            // To remove lines from .htaccess file
+            $lines = array();
+        }
+
+        // We try to update .htaccess file
+        if($this->update_htaccess($lines, true)===false)
+        {
+            // if we're in web admin panel
+            if(!$wp_cli_call)
+            {
+                add_settings_error('cannotUpdateHtAccess',
+                                    'empty',
+                                    ___("Impossible to update .htaccess file"),
+                                    'error');
+            }
+            $enabled = $enabled_in_case_of_error;
         }
 
         return $enabled;
