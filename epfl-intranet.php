@@ -69,6 +69,8 @@ class Controller
 class Settings extends \EPFL\SettingsBase
 {
     const SLUG = "epfl_intranet";
+    const ENABLED = '1';
+    const DISABLED = '0';
     var $is_debug_enabled = false;
 
     function hook()
@@ -83,7 +85,7 @@ class Settings extends \EPFL\SettingsBase
 
         add_action( 'admin_notices', array($this, 'show_plugin_status' ));
 
-        if(trim($this->get('enabled'))==1)
+        if(trim($this->get('enabled'))==$this::ENABLED)
         {
             /* If visiting website */
             if(!is_admin())
@@ -107,7 +109,7 @@ class Settings extends \EPFL\SettingsBase
 
         $this->debug("-> show_plugin_status");
         /* Website is private */
-        if(trim($this->get('enabled'))==1)
+        if(trim($this->get('enabled'))==$this::ENABLED)
         {
             /* If visiting admin console  */
             if(is_admin())
@@ -199,7 +201,7 @@ class Settings extends \EPFL\SettingsBase
      */
     function wp_cli_enable_protection($args, $assoc_args)
     {
-        $this->change_protection_status('1', 
+        $this->change_protection_status($this::ENABLED, 
                                         (array_key_exists('restrict-to-groups', $assoc_args)) ? $assoc_args['restrict-to-groups'] : "");
     }
 
@@ -210,7 +212,7 @@ class Settings extends \EPFL\SettingsBase
     function wp_cli_disable_protection()
     {
         // We abritrary decide to remove 'restricted to groups' options to avoid any surprise when reactivating protection using WP-CLI
-        $this->change_protection_status('0', '');
+        $this->change_protection_status($this::DISABLED, '');
     }
 
 
@@ -220,7 +222,7 @@ class Settings extends \EPFL\SettingsBase
     function wp_cli_status()
     {
         $msg = "Protection is ";
-        if(trim($this->get('enabled'))==1)
+        if(trim($this->get('enabled'))==$this::ENABLED)
         {
             $msg .= "enabled";
             $restricted_to_groups = $this->get('restrict_to_groups');
@@ -264,8 +266,8 @@ class Settings extends \EPFL\SettingsBase
                 
                 $this->update('restrict_to_groups', $restrict_to_groups);
 
-                $msg = "Site protection successfully ". ($enabled=='1'? "enabled": "disabled");
-                if($enabled == '1' && $restrict_to_groups != "") $msg .= " for group(s) ".$restrict_to_groups;
+                $msg = "Site protection successfully ". ($enabled==$this::ENABLED? "enabled": "disabled");
+                if($enabled == $this::ENABLED && $restrict_to_groups != "") $msg .= " for group(s) ".$restrict_to_groups;
 
                 \WP_CLI::success($msg);
             }
@@ -322,7 +324,7 @@ class Settings extends \EPFL\SettingsBase
     /**
     * Validate activation/deactivation. In fact we just add things into .htaccess file to protect medias.
     *
-    * @param String enabled: '0' or '1' to tell if we asked to activate or deactivate plugin
+    * @param String enabled: $this::DISABLED or $this::ENABLED to tell if we asked to activate or deactivate plugin
     * @param Bool wp_cli_call: to tell if function is called with WPCLI or not
     */
     function validate_enabled($enabled, $wp_cli_call=false)
@@ -333,7 +335,7 @@ class Settings extends \EPFL\SettingsBase
         $enabled_in_case_of_error = trim($this->get('enabled'));
         
         /* Website protection is enabled */
-        if($enabled == '1')
+        if($enabled == $this::ENABLED)
         {
 
             /* If prerequisite are not met, */
@@ -380,7 +382,7 @@ class Settings extends \EPFL\SettingsBase
     {
 
         /* If functionality is activated, */
-        if($this->get('enabled') == 1)
+        if($this->get('enabled') == $this::ENABLED)
         {
             $this->debug("Intranet activated");
 
