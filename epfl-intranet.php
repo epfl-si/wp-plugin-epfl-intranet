@@ -95,7 +95,9 @@ class Settings extends \EPFL\SettingsBase
 
         if ( defined( 'WP_CLI' ) && WP_CLI ) 
         {
-            \WP_CLI::add_command('epfl intranet sync-htaccess', [get_called_class(), 'sync_htaccess' ]);
+            \WP_CLI::add_command('epfl intranet status', [get_called_class(), 'wp_cli_status' ]);
+            \WP_CLI::add_command('epfl intranet enable-protection', [get_called_class(), 'wp_cli_enable_protection' ]);
+            \WP_CLI::add_command('epfl intranet disable-protection', [get_called_class(), 'wp_cli_disable_protection' ]);
         }
 
     }
@@ -183,25 +185,101 @@ class Settings extends \EPFL\SettingsBase
     /***************************************************************************************/
 
 
-  /*************************************************************************************************/
+    /***************************************************************************************/
+    /*********************************** WP CLI Commands ***********************************/
+    
 
     /**
-     * Sync .htaccess file from saved status
+     * Enable site protection
+     *
+     * ## OPTIONS
+	 *
+     * [--restrict-to-groups=<groups>]
+	 * : Group (or list of groups, separated by comma) to restrict website access to
      */
-    function sync_htaccess()
+    function wp_cli_enable_protection($args, $assoc_args)
     {
-        // Getting current status
-        $enabled = trim($this->get('enabled'));
+        $this->change_protection_status('1', 
+                                        (array_key_exists('restrict-to-groups', $assoc_args)) ? $assoc_args['restrict-to-groups'] : "");
+    }
 
-        //Trying to sync .htaccess file
-        if($this->validate_enabled($enabled, true) == $enabled)
+
+    /**
+     * Disable site protection
+     */
+    function wp_cli_disable_protection()
+    {
+        // We abritrary decide to remove 'restricted to groups' options to avoid any surprise when reactivating protection using WP-CLI
+        $this->change_protection_status('0', '');
+    }
+
+
+    /**
+     * Returns protection status
+     */
+    function wp_cli_status()
+    {
+        $msg = "Protection is ";
+        if(trim($this->get('enabled'))==1)
         {
-            \WP_CLI::success(".htaccess fild successfuly updated");
+            $msg .= "enabled";
+            $restricted_to_groups = $this->get('restrict_to_groups');
+
+            if($restricted_to_groups != "")
+            {
+                $msg .= " and restricted to group(s) ".$restricted_to_groups;
+            }
         }
         else
         {
-            \WP_CLI::error("Error updating .htaccess file", true);
+            $msg .= "disabled";
         }
+
+        \WP_CLI::success($msg);
+    }
+
+
+
+
+    /*********************************** WP CLI Commands ***********************************/
+    /***************************************************************************************/
+    
+
+
+    /**
+     * Change site protection status
+     * 
+     * @param Bool $enabled -> 
+     */
+    function change_protection_status($enabled, $restrict_to_groups)
+    {
+        // If validation (and .htaccess update) is OK
+        if($this->validate_enabled($enabled, true) == $enabled)
+        {
+            $this->update('enabled', $enabled);
+
+            // Checking if entered groups are correct
+            if($this->validate_restrict_to_groups($restrict_to_groups) == $restrict_to_groups)
+            {
+                
+                $this->update('restrict_to_groups', $restrict_to_groups);
+
+                $msg = "Site protection successfully ". ($enabled=='1'? "enabled": "disabled");
+                if($enabled == '1' && $restrict_to_groups != "") $msg .= " for group(s) ".$restrict_to_groups;
+
+                \WP_CLI::success($msg);
+            }
+            else
+            {
+                \WP_CLI::error("Incorrect group(s) provided", true);    
+            }
+        }
+        else
+        {
+            \WP_CLI::error("Error enabling protection", true);
+        }
+
+
     }
 
     /**
@@ -293,6 +371,8 @@ class Settings extends \EPFL\SettingsBase
         return $enabled;
     }
 
+
+
     /**
     * Validate entered group list for which to restrict access
     */
@@ -303,18 +383,12 @@ class Settings extends \EPFL\SettingsBase
         if($this->get('enabled') == 1)
         {
             $this->debug("Intranet activated");
-            /* If access only need authentication */
-            if(empty(trim($restrict_to_groups)))
-            {
-                /* All group have access, Accred plugin will handle this*/
-                $epfl_accred_group = '*';
-            }
-            else /* We have to filter for one (or more) group(s) */
-            {
-                /* We remove unecessary spaces*/
-                $restrict_to_groups = implode(",", array_map('trim', explode(",", $restrict_to_groups) ) );
-                $epfl_accred_group = $restrict_to_groups;
-            }
+
+            $restrict_to_groups = implode(",", array_map('trim', explode(",", $restrict_to_groups) ) );
+
+            /* All group have access, Accred plugin will handle this*/
+            $epfl_accred_group = (empty(trim($restrict_to_groups))) ? '*': $restrict_to_groups;
+            
         }
         else /* Website protection is disabled */
         {
