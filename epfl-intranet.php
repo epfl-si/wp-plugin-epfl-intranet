@@ -2,7 +2,7 @@
 /*
  * Plugin Name: EPFL Intranet
  * Description: Use EPFL Accred to allow website access only to specific group(s) or just force to be authenticated
- * Version:     0.17
+ * Version:     0.18
  * Author:      Lucien Chaboudez
  * Author URI:  mailto:lucien.chaboudez@epfl.ch
  */
@@ -69,6 +69,8 @@ class Controller
 class Settings extends \EPFL\SettingsBase
 {
     const SLUG = "epfl_intranet";
+    const ENABLED = '1';
+    const DISABLED = '0';
     var $is_debug_enabled = false;
 
     function hook()
@@ -83,7 +85,7 @@ class Settings extends \EPFL\SettingsBase
 
         add_action( 'admin_notices', array($this, 'show_plugin_status' ));
 
-        if(trim($this->get('enabled'))==1)
+        if(trim($this->get('enabled'))==$this::ENABLED)
         {
             /* If visiting website */
             if(!is_admin())
@@ -93,6 +95,13 @@ class Settings extends \EPFL\SettingsBase
             }
         }
 
+        if ( defined( 'WP_CLI' ) && WP_CLI ) 
+        {
+            \WP_CLI::add_command('epfl intranet status', [get_called_class(), 'wp_cli_status' ]);
+            \WP_CLI::add_command('epfl intranet enable-protection', [get_called_class(), 'wp_cli_enable_protection' ]);
+            \WP_CLI::add_command('epfl intranet disable-protection', [get_called_class(), 'wp_cli_disable_protection' ]);
+        }
+
     }
 
     function show_plugin_status()
@@ -100,7 +109,7 @@ class Settings extends \EPFL\SettingsBase
 
         $this->debug("-> show_plugin_status");
         /* Website is private */
-        if(trim($this->get('enabled'))==1)
+        if(trim($this->get('enabled'))==$this::ENABLED)
         {
             /* If visiting admin console  */
             if(is_admin())
@@ -178,80 +187,193 @@ class Settings extends \EPFL\SettingsBase
     /***************************************************************************************/
 
 
-  /*************************************************************************************************/
+    /***************************************************************************************/
+    /*********************************** WP CLI Commands ***********************************/
+    
 
-   /*
-      BUT : Add/remove .htaccess content
-   */
-   function update_htaccess($insertion, $at_beginning=false)
-   {
+    /**
+     * Enable site protection
+     *
+     * ## OPTIONS
+	 *
+     * [--restrict-to-groups=<groups>]
+	 * : Group (or list of groups, separated by comma) to restrict website access to
+     */
+    function wp_cli_enable_protection($args, $assoc_args)
+    {
+        $this->change_protection_status($this::ENABLED, 
+                                        (array_key_exists('restrict-to-groups', $assoc_args)) ? $assoc_args['restrict-to-groups'] : "");
+    }
 
-      /* In the past, we were using get_home_path() func to have path to .htaccess file. BUT, with WordPress symlinking
-      functionality, get_home_path() returns path to WordPress images files = /wp/
-      So, to fix this, we access .htaccess file using WP_CONTENT_DIR which is defined in wp-config.php file. We just
-       have to remove 'wp-content' '*/
-      $filename = str_replace("wp-content", ".htaccess", WP_CONTENT_DIR);
 
-      $marker = 'EPFL-Intranet';
+    /**
+     * Disable site protection
+     */
+    function wp_cli_disable_protection()
+    {
+        // We abritrary decide to remove 'restricted to groups' options to avoid any surprise when reactivating protection using WP-CLI
+        $this->change_protection_status($this::DISABLED, '');
+    }
 
-      return insert_with_markers($filename, $marker, $insertion);
 
-   }
+    /**
+     * Returns protection status
+     */
+    function wp_cli_status()
+    {
+        $msg = "Protection is ";
+        if(trim($this->get('enabled'))==$this::ENABLED)
+        {
+            $msg .= "enabled";
+            $restricted_to_groups = $this->get('restrict_to_groups');
+
+            if($restricted_to_groups != "")
+            {
+                $msg .= " and restricted to group(s) ".$restricted_to_groups;
+            }
+        }
+        else
+        {
+            $msg .= "disabled";
+        }
+
+        \WP_CLI::success($msg);
+    }
+
+
+
+
+    /*********************************** WP CLI Commands ***********************************/
+    /***************************************************************************************/
+    
+
+
+    /**
+     * Change site protection status
+     * 
+     * @param Bool $enabled -> 
+     */
+    function change_protection_status($enabled, $restrict_to_groups)
+    {
+        // If validation (and .htaccess update) is OK
+        if($this->validate_enabled($enabled, true) == $enabled)
+        {
+            $this->update('enabled', $enabled);
+
+            // Checking if entered groups are correct
+            if($this->validate_restrict_to_groups($restrict_to_groups) == $restrict_to_groups)
+            {
+                
+                $this->update('restrict_to_groups', $restrict_to_groups);
+
+                $msg = "Site protection successfully ". ($enabled==$this::ENABLED? "enabled": "disabled");
+                if($enabled == $this::ENABLED && $restrict_to_groups != "") $msg .= " for group(s) ".$restrict_to_groups;
+
+                \WP_CLI::success($msg);
+            }
+            else
+            {
+                \WP_CLI::error("Incorrect group(s) provided", true);    
+            }
+        }
+        else
+        {
+            \WP_CLI::error("Error enabling protection", true);
+        }
+
+
+    }
+
+    /**
+     * Add/remove .htaccess content
+     */
+    function update_htaccess($insertion, $at_beginning=false)
+    {
+
+        /* In the past, we were using get_home_path() func to have path to .htaccess file. BUT, with WordPress symlinking
+        functionality, get_home_path() returns path to WordPress images files = /wp/
+        So, to fix this, we access .htaccess file using WP_CONTENT_DIR which is defined in wp-config.php file. We just
+        have to remove 'wp-content' '*/
+        $filename = str_replace("wp-content", ".htaccess", WP_CONTENT_DIR);
+
+        $marker = 'EPFL-Intranet';
+
+        return insert_with_markers($filename, $marker, $insertion);
+
+    }
+
+
+    /**
+        * Returns lines to add in .htaccess file
+        */
+    function htaccess_lines()
+    {
+        $lines = array();
+
+        $lines[] = "RewriteEngine On";
+        // if requested URL is in media folder,
+        $lines[] = "RewriteCond %{REQUEST_URI} wp-content/uploads/";
+
+        // We redirect on a file which will check if logged in (we add path to requested file as parameter
+        $lines[] = "RewriteRule wp-content/uploads/(.*)$ wp-content/plugins/epfl-intranet/inc/protect-medias.php?file=$1 [QSA,L]";
+
+        return $lines;
+    }
 
 
     /**
     * Validate activation/deactivation. In fact we just add things into .htaccess file to protect medias.
+    *
+    * @param String enabled: $this::DISABLED or $this::ENABLED to tell if we asked to activate or deactivate plugin
+    * @param Bool wp_cli_call: to tell if function is called with WPCLI or not
     */
-    function validate_enabled($enabled)
+    function validate_enabled($enabled, $wp_cli_call=false)
     {
+        /* Defining value to return in case of error in prerequisites/other. We just let it as it is...
+        If it's already activated, we let it activated (with current settings) to avoid any security issue.
+        If it's not activated, we don't activate it (because of errors) */
+        $enabled_in_case_of_error = trim($this->get('enabled'));
+        
         /* Website protection is enabled */
-        if($enabled == '1')
+        if($enabled == $this::ENABLED)
         {
-            /* Defining value to return in case of error in prerequisites/other. We just let it as it is...
-             If it's already activated, we let it activated (with current settings) to avoid any security issue.
-             If it's not activated, we don't activate it (because of errors) */
-            $enabled_in_case_of_error = trim($this->get('enabled'));
 
             /* If prerequisite are not met, */
             if(!$this->check_prerequisites())
             {
-                $enabled = $enabled_in_case_of_error;
-
+                return $enabled_in_case_of_error;
             }
             else
             {
 
-               $lines = array();
+                $lines = $this->htaccess_lines();
 
-               $lines[] = "RewriteEngine On";
-               // if requested URL is in media folder,
-               $lines[] = "RewriteCond %{REQUEST_URI} wp-content/uploads/";
-
-               // We redirect on a file which will check if logged in (we add path to requested file as parameter
-               $lines[] = "RewriteRule wp-content/uploads/(.*)$ wp-content/plugins/epfl-intranet/inc/protect-medias.php?file=$1 [QSA,L]";
-               if($this->update_htaccess($lines, true)===false)
-               {
-                  add_settings_error('cannotUpdateHtAccess',
-                                  'empty',
-                                  ___("Impossible to update .htaccess file"),
-                                  'error');
-                  $enabled = $enabled_in_case_of_error;
-               }
              }
         }
         else /* We don't want to protect website */
         {
-           if($this->update_htaccess(array())===false)
-           {
-              add_settings_error('cannotUpdateHtAccess',
-                              'empty',
-                              ___("Impossible to update .htaccess file"),
-                              'error');
-           }
+            // To remove lines from .htaccess file
+            $lines = array();
+        }
+
+        // We try to update .htaccess file
+        if($this->update_htaccess($lines, true)===false)
+        {
+            // if we're in web admin panel
+            if(!$wp_cli_call)
+            {
+                add_settings_error('cannotUpdateHtAccess',
+                                    'empty',
+                                    ___("Impossible to update .htaccess file"),
+                                    'error');
+            }
+            $enabled = $enabled_in_case_of_error;
         }
 
         return $enabled;
     }
+
+
 
     /**
     * Validate entered group list for which to restrict access
@@ -260,21 +382,15 @@ class Settings extends \EPFL\SettingsBase
     {
 
         /* If functionality is activated, */
-        if($this->get('enabled') == 1)
+        if($this->get('enabled') == $this::ENABLED)
         {
             $this->debug("Intranet activated");
-            /* If access only need authentication */
-            if(empty(trim($restrict_to_groups)))
-            {
-                /* All group have access, Accred plugin will handle this*/
-                $epfl_accred_group = '*';
-            }
-            else /* We have to filter for one (or more) group(s) */
-            {
-                /* We remove unecessary spaces*/
-                $restrict_to_groups = implode(",", array_map('trim', explode(",", $restrict_to_groups) ) );
-                $epfl_accred_group = $restrict_to_groups;
-            }
+
+            $restrict_to_groups = implode(",", array_map('trim', explode(",", $restrict_to_groups) ) );
+
+            /* All group have access, Accred plugin will handle this*/
+            $epfl_accred_group = (empty(trim($restrict_to_groups))) ? '*': $restrict_to_groups;
+            
         }
         else /* Website protection is disabled */
         {
