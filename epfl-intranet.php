@@ -296,7 +296,7 @@ class Settings extends \EPFL\SettingsBase
         have to remove 'wp-content' '*/
         $filename = str_replace("wp-content", ".htaccess", WP_CONTENT_DIR);
 
-        $marker = 'EPFL-Intranet';
+        $marker = 'ANSIBLE MANAGED BLOCK FOR EPFL-Intranet';
 
         return insert_with_markers($filename, $marker, $insertion);
 
