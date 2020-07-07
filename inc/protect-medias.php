@@ -1,7 +1,15 @@
 <?PHP
     require_once(dirname($_SERVER["SCRIPT_FILENAME"], 5) . '/wp-load.php');
 
-    if (!is_user_logged_in())
+
+    
+
+    /* We redirect on login page only if plugin is active. Otherwise there's no protection.
+    Normally, if plugin is deactivated, RewriteRule in .htaccess file redirection on present file
+    is not present, so, checking plugin activation is useless. But, we do this in case of an
+    inconsistency somewhere in the Matrix! */
+    $epfl_intranet_plugin_full_path = dirname(__FILE__). '/../epfl-intranet.php';
+    if (is_plugin_active($epfl_intranet_plugin_full_path) && !is_user_logged_in())
     {
        $upload_dir = wp_upload_dir();
        wp_redirect( wp_login_url( $upload_dir['baseurl'] . '/' . $_GET[ 'file' ]));

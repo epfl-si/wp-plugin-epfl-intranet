@@ -2,7 +2,7 @@
 /*
  * Plugin Name: EPFL Intranet
  * Description: Use EPFL Accred to allow website access only to specific group(s) or just force to be authenticated
- * Version:     0.18
+ * Version:     0.19
  * Author:      Lucien Chaboudez
  * Author URI:  mailto:lucien.chaboudez@epfl.ch
  */
@@ -18,8 +18,8 @@ if (! class_exists("EPFL\\SettingsBase") ) {
 }
 
 /**
-Plugin function to translate text
-*/
+ *  Plugin function to translate text
+ */
 function ___($text)
 {
     return __($text, "epfl-intranet");
@@ -64,13 +64,120 @@ class Controller
 
     }
 
+
+    /**
+     * Add/remove .htaccess content
+     */
+    static function update_htaccess($insertion, $at_beginning=false)
+    {
+
+        /* In the past, we were using get_home_path() func to have path to .htaccess file. BUT, with WordPress symlinking
+        functionality, get_home_path() returns path to WordPress images files = /wp/
+        So, to fix this, we access .htaccess file using WP_CONTENT_DIR which is defined in wp-config.php file. We just
+        have to remove 'wp-content' '*/
+        $filename = str_replace("wp-content", ".htaccess", WP_CONTENT_DIR);
+
+        $marker = 'EPFL-Intranet';
+
+        return insert_with_markers($filename, $marker, $insertion);
+    }
+
+
+
+    static function deactivate()
+    {
+        error_log("EPFL-Intranet: deactivating...");
+        // We try to update .htaccess file
+        if(self::update_htaccess(array(), true)===false)
+        {
+            die(___("Error deactivating EPFL-Intranet, impossible to update .htaccess file"));
+        }
+        error_log("EPFL-Intranet: deactivated");
+    }
+
+    /**
+    * Validate activation/deactivation. In fact we just add things into .htaccess file to protect medias.
+    */
+    static function activate()
+    {
+        error_log("EPFL-Intranet: activating...");
+
+        /* If prerequisite are not met, */
+        self::check_prerequisites();
+
+        $lines = array();
+
+        $lines[] = "RewriteEngine On";
+        // if requested URL is in media folder,
+        $lines[] = "RewriteCond %{REQUEST_URI} wp-content/uploads/";
+
+        // We redirect on a file which will check if logged in (we add path to requested file as parameter
+        $lines[] = "RewriteRule wp-content/uploads/(.*)$ wp-content/plugins/epfl-intranet/inc/protect-medias.php?file=$1 [QSA,L]";
+
+        // We try to update .htaccess file
+        if(self::update_htaccess($lines, true)===false)
+        {
+            die(___("Error activating EPFL-Intranet, impossible to update .htaccess file\n"));
+        }
+        error_log("EPFL-Intranet: activated");
+
+    }
+
+    /**
+    * Check if all dependencies are present
+    *
+    * @return Bool true if OK
+    *         String error message
+    */
+    static function check_prerequisites()
+    {
+        $accred_min_version = 0.11;
+        $accred_plugin_relative_path = 'accred/EPFL-Accred.php';
+        $accred_plugin_full_path = dirname(__FILE__). '/../'. $accred_plugin_relative_path;
+
+        /* Accred Plugin missing */
+        if(!is_plugin_active($accred_plugin_relative_path))
+        {
+            die(___("Cannot activate plugin! EPFL-Accred plugin is not installed/activated\n"));
+        }
+        else /* Accred plugin present */
+        {
+            /* Getting data */
+            $plugin_data = get_plugin_data($accred_plugin_full_path);
+
+            /* Check if version is 'vpsi' */
+            if(preg_match('/\(vpsi\)\s*$/', $plugin_data['Version'])!==1)
+            {
+                die(___("Cannot activate plugin!This is not 'vpsi' version of EPFL-Accred plugin which is installed\n"));
+            }
+            else /* It's VPSI version */
+            {
+                /* Version is like:
+                0.11 (vpsi) */
+                preg_match('/^(\d+\.\d+)\s*\(vpsi\)\s*$/', $plugin_data['Version'], $output);
+
+                /* $output is array like :
+                array(0	=>	0.11 (vpsi)
+                      1	=>	0.11) */
+
+                /* Check min version */
+                if(floatval($output[1]) < $accred_min_version)
+                {
+                    die(sprintf(___("Cannot activate plugin! EPFL-Accred 'vpsi' plugin version must be at least %s (version %s installed)\n"),
+                                       $accred_min_version, $output[1]));
+                }
+
+            }
+        }
+
+        return true;
+    }
+
 }
 
 class Settings extends \EPFL\SettingsBase
 {
     const SLUG = "epfl_intranet";
-    const ENABLED = '1';
-    const DISABLED = '0';
     var $is_debug_enabled = false;
 
     function hook()
@@ -85,21 +192,17 @@ class Settings extends \EPFL\SettingsBase
 
         add_action( 'admin_notices', array($this, 'show_plugin_status' ));
 
-        if(trim($this->get('enabled'))==$this::ENABLED)
+        /* If visiting website */
+        if(!is_admin())
         {
-            /* If visiting website */
-            if(!is_admin())
-            {
-                $this->debug("Require protect-site.php");
-                require_once(dirname(__FILE__) . "/inc/protect-site.php");
-            }
+            $this->debug("Require protect-site.php");
+            require_once(dirname(__FILE__) . "/inc/protect-site.php");
         }
 
         if ( defined( 'WP_CLI' ) && WP_CLI ) 
         {
             \WP_CLI::add_command('epfl intranet status', [get_called_class(), 'wp_cli_status' ]);
-            \WP_CLI::add_command('epfl intranet enable-protection', [get_called_class(), 'wp_cli_enable_protection' ]);
-            \WP_CLI::add_command('epfl intranet disable-protection', [get_called_class(), 'wp_cli_disable_protection' ]);
+            \WP_CLI::add_command('epfl intranet update-protection', [get_called_class(), 'wp_cli_update_protection' ]);
         }
 
     }
@@ -108,34 +211,32 @@ class Settings extends \EPFL\SettingsBase
     {
 
         $this->debug("-> show_plugin_status");
-        /* Website is private */
-        if(trim($this->get('enabled'))==$this::ENABLED)
+        /* Website is private by default if plugin is activated */
+        
+        /* If visiting admin console  */
+        if(is_admin())
         {
-            /* If visiting admin console  */
-            if(is_admin())
+            $restricted_to_groups = $this->get('subscriber_group', 'epfl_accred');
+
+            /* Only authentication needed*/
+            if($restricted_to_groups == "*")
             {
-                $restricted_to_groups = $this->get('subscriber_group', 'epfl_accred');
-
-                /* Only authentication needed*/
-                if($restricted_to_groups == "*")
-                {
-                    $restrict_message = ___("Website access needs Tequila/Gaspar authentication");
-                }
-                else /* Authentication AND authorization needed*/
-                {
-                    $restrict_message = sprintf(___("Website access is restricted to following group(s): %s"),
-                                            $restricted_to_groups);
-                }
-
-                /* Adding link to configuration page */
-                $restrict_message .= ' - <a href="'.admin_url().'options-general.php?page=epfl_intranet">'. ___("Configuration page").'</a>';
-
-
-                echo '<div class="notice notice-info">'.
-                     '<img src="' . plugins_url( 'img/lock.svg', __FILE__ ) . '" style="height:32px; width:32px; float:left; margin:3px 15px 3px 0px;">'.
-                     '<p><b>EPFL Intranet - </b> '.$restrict_message.'</p>'.
-                     '</div>';
+                $restrict_message = ___("Website access needs Tequila/Gaspar authentication");
             }
+            else /* Authentication AND authorization needed*/
+            {
+                $restrict_message = sprintf(___("Website access is restricted to following group(s): %s"),
+                                        $restricted_to_groups);
+            }
+
+            /* Adding link to configuration page */
+            $restrict_message .= ' - <a href="'.admin_url().'options-general.php?page=epfl_intranet">'. ___("Configuration page").'</a>';
+
+
+            echo '<div class="notice notice-info">'.
+                    '<img src="' . plugins_url( 'img/lock.svg', __FILE__ ) . '" style="height:32px; width:32px; float:left; margin:3px 15px 3px 0px;">'.
+                    '<p><b>EPFL Intranet - </b> '.$restrict_message.'</p>'.
+                    '</div>';
         }
     }
 
@@ -192,27 +293,16 @@ class Settings extends \EPFL\SettingsBase
     
 
     /**
-     * Enable site protection
+     * Update site protection
      *
      * ## OPTIONS
 	 *
      * [--restrict-to-groups=<groups>]
-	 * : Group (or list of groups, separated by comma) to restrict website access to
+	 * : Group (or list of groups, separated by comma) to restrict website access to. If no group given, only authentication will be asked
      */
-    function wp_cli_enable_protection($args, $assoc_args)
+    function wp_cli_update_protection($args, $assoc_args)
     {
-        $this->change_protection_status($this::ENABLED, 
-                                        (array_key_exists('restrict-to-groups', $assoc_args)) ? $assoc_args['restrict-to-groups'] : "");
-    }
-
-
-    /**
-     * Disable site protection
-     */
-    function wp_cli_disable_protection()
-    {
-        // We abritrary decide to remove 'restricted to groups' options to avoid any surprise when reactivating protection using WP-CLI
-        $this->change_protection_status($this::DISABLED, '');
+        $this->change_protection_config((array_key_exists('restrict-to-groups', $assoc_args)) ? $assoc_args['restrict-to-groups'] : "");
     }
 
 
@@ -221,22 +311,15 @@ class Settings extends \EPFL\SettingsBase
      */
     function wp_cli_status()
     {
-        $msg = "Protection is ";
-        if(trim($this->get('enabled'))==$this::ENABLED)
-        {
-            $msg .= "enabled";
-            $restricted_to_groups = $this->get('restrict_to_groups');
+        $msg = "Protection is enabled";
+        
+        $restricted_to_groups = $this->get('restrict_to_groups');
 
-            if($restricted_to_groups != "")
-            {
-                $msg .= " and restricted to group(s) ".$restricted_to_groups;
-            }
-        }
-        else
+        if($restricted_to_groups != "")
         {
-            $msg .= "disabled";
+            $msg .= " and restricted to group(s) ".$restricted_to_groups;
         }
-
+    
         \WP_CLI::success($msg);
     }
 
@@ -251,127 +334,29 @@ class Settings extends \EPFL\SettingsBase
     /**
      * Change site protection status
      * 
-     * @param Bool $enabled -> 
+     * @param String $restrict_to_groups -> List of groups to restrict access to (separated by ,)
      */
-    function change_protection_status($enabled, $restrict_to_groups)
+    function change_protection_config($restrict_to_groups)
     {
-        // If validation (and .htaccess update) is OK
-        if($this->validate_enabled($enabled, true) == $enabled)
+        // Checking if entered groups are correct
+        if($this->validate_restrict_to_groups($restrict_to_groups) == $restrict_to_groups)
         {
-            $this->update('enabled', $enabled);
+            
+            $this->update('restrict_to_groups', $restrict_to_groups);
 
-            // Checking if entered groups are correct
-            if($this->validate_restrict_to_groups($restrict_to_groups) == $restrict_to_groups)
-            {
-                
-                $this->update('restrict_to_groups', $restrict_to_groups);
+            $msg = "Site protection successfully updated";
+            if($restrict_to_groups != "") $msg .= " for group(s) ".$restrict_to_groups;
 
-                $msg = "Site protection successfully ". ($enabled==$this::ENABLED? "enabled": "disabled");
-                if($enabled == $this::ENABLED && $restrict_to_groups != "") $msg .= " for group(s) ".$restrict_to_groups;
-
-                \WP_CLI::success($msg);
-            }
-            else
-            {
-                \WP_CLI::error("Incorrect group(s) provided", true);    
-            }
+            \WP_CLI::success($msg);
         }
         else
         {
-            \WP_CLI::error("Error enabling protection", true);
+            \WP_CLI::error("Incorrect group(s) provided", true);    
         }
-
 
     }
 
-    /**
-     * Add/remove .htaccess content
-     */
-    function update_htaccess($insertion, $at_beginning=false)
-    {
-
-        /* In the past, we were using get_home_path() func to have path to .htaccess file. BUT, with WordPress symlinking
-        functionality, get_home_path() returns path to WordPress images files = /wp/
-        So, to fix this, we access .htaccess file using WP_CONTENT_DIR which is defined in wp-config.php file. We just
-        have to remove 'wp-content' '*/
-        $filename = str_replace("wp-content", ".htaccess", WP_CONTENT_DIR);
-
-        $marker = 'EPFL-Intranet';
-
-        return insert_with_markers($filename, $marker, $insertion);
-
-    }
-
-
-    /**
-        * Returns lines to add in .htaccess file
-        */
-    function htaccess_lines()
-    {
-        $lines = array();
-
-        $lines[] = "RewriteEngine On";
-        // if requested URL is in media folder,
-        $lines[] = "RewriteCond %{REQUEST_URI} wp-content/uploads/";
-
-        // We redirect on a file which will check if logged in (we add path to requested file as parameter
-        $lines[] = "RewriteRule wp-content/uploads/(.*)$ wp-content/plugins/epfl-intranet/inc/protect-medias.php?file=$1 [QSA,L]";
-
-        return $lines;
-    }
-
-
-    /**
-    * Validate activation/deactivation. In fact we just add things into .htaccess file to protect medias.
-    *
-    * @param String enabled: $this::DISABLED or $this::ENABLED to tell if we asked to activate or deactivate plugin
-    * @param Bool wp_cli_call: to tell if function is called with WPCLI or not
-    */
-    function validate_enabled($enabled, $wp_cli_call=false)
-    {
-        /* Defining value to return in case of error in prerequisites/other. We just let it as it is...
-        If it's already activated, we let it activated (with current settings) to avoid any security issue.
-        If it's not activated, we don't activate it (because of errors) */
-        $enabled_in_case_of_error = trim($this->get('enabled'));
-        
-        /* Website protection is enabled */
-        if($enabled == $this::ENABLED)
-        {
-
-            /* If prerequisite are not met, */
-            if(!$this->check_prerequisites())
-            {
-                return $enabled_in_case_of_error;
-            }
-            else
-            {
-
-                $lines = $this->htaccess_lines();
-
-             }
-        }
-        else /* We don't want to protect website */
-        {
-            // To remove lines from .htaccess file
-            $lines = array();
-        }
-
-        // We try to update .htaccess file
-        if($this->update_htaccess($lines, true)===false)
-        {
-            // if we're in web admin panel
-            if(!$wp_cli_call)
-            {
-                add_settings_error('cannotUpdateHtAccess',
-                                    'empty',
-                                    ___("Impossible to update .htaccess file"),
-                                    'error');
-            }
-            $enabled = $enabled_in_case_of_error;
-        }
-
-        return $enabled;
-    }
+    
 
 
 
@@ -380,24 +365,13 @@ class Settings extends \EPFL\SettingsBase
     */
     function validate_restrict_to_groups($restrict_to_groups)
     {
+        $this->debug("Intranet activated");
 
-        /* If functionality is activated, */
-        if($this->get('enabled') == $this::ENABLED)
-        {
-            $this->debug("Intranet activated");
+        $restrict_to_groups = implode(",", array_map('trim', explode(",", $restrict_to_groups) ) );
 
-            $restrict_to_groups = implode(",", array_map('trim', explode(",", $restrict_to_groups) ) );
-
-            /* All group have access, Accred plugin will handle this*/
-            $epfl_accred_group = (empty(trim($restrict_to_groups))) ? '*': $restrict_to_groups;
-            
-        }
-        else /* Website protection is disabled */
-        {
-            $this->debug("Intranet deactivated");
-            $epfl_accred_group = "";
-        }
-
+        /* All group have access, Accred plugin will handle this*/
+        $epfl_accred_group = (empty(trim($restrict_to_groups))) ? '*': $restrict_to_groups;
+   
         $this->debug("Access restricted to: ". var_export($epfl_accred_group, true));
 
         /* We update subscribers group for EPFL Accred plugin to allow everyone */
@@ -408,66 +382,7 @@ class Settings extends \EPFL\SettingsBase
     }
 
 
-    /**
-    * Check if all dependencies are present
-    */
-    function check_prerequisites()
-    {
-        $accred_min_version = 0.11;
-        $accred_plugin_relative_path = 'accred/EPFL-Accred.php';
-        $accred_plugin_full_path = dirname(__FILE__). '/../'. $accred_plugin_relative_path;
-
-        /* Accred Plugin missing */
-        if(!is_plugin_active($accred_plugin_relative_path))
-        {
-            add_settings_error(null,
-                  			   null,
-                  			    ___("Cannot activate plugin!<br>EPFL-Accred plugin is not installed/activated"),
-                  			   'error');
-            return false;
-        }
-        else /* Accred plugin present */
-        {
-            /* Getting data */
-            $plugin_data = get_plugin_data($accred_plugin_full_path);
-
-            /* Check if version is 'vpsi' */
-            if(preg_match('/\(vpsi\)\s*$/', $plugin_data['Version'])!==1)
-            {
-                add_settings_error(null,
-                  			   null,
-                  			    ___("Cannot activate plugin!<br>This is not 'vpsi' version of EPFL-Accred plugin which is installed"),
-                  			   'error');
-                return false;
-            }
-            else /* It's VPSI version */
-            {
-                /* Version is like:
-                0.11 (vpsi) */
-                preg_match('/^(\d+\.\d+)\s*\(vpsi\)\s*$/', $plugin_data['Version'], $output);
-
-                /* $output is array like :
-                array(0	=>	0.11 (vpsi)
-                      1	=>	0.11) */
-
-                error_log(var_export($output, true));
-                /* Check min version */
-                if(floatval($output[1]) < $accred_min_version)
-                {
-                    add_settings_error(null,
-                  			   null,
-                  			    sprintf(___("Cannot activate plugin!<br>EPFL-Accred 'vpsi' plugin version must be at least %s (version %s installed)"),
-                                        $accred_min_version, $output[1]),
-                  			   'error');
-
-                    return false;
-                }
-
-            }
-        }
-
-        return true;
-    }
+    
 
     /**
      * Prepare the admin menu with settings and their values
@@ -477,27 +392,6 @@ class Settings extends \EPFL\SettingsBase
 
         $this->add_settings_section('section_about', ___('About'));
         $this->add_settings_section('section_settings', ___('Settings'));
-
-
-        /* Check box to activate or not the functionality */
-        $this->register_setting('enabled', array(
-                'type'    => 'boolean',
-                'sanitize_callback' => array($this, 'validate_enabled')));
-
-        $enabled = $this->get('enabled');
-        if(empty($enabled)) $enabled=0;
-
-        $this->add_settings_field(
-                'section_settings',
-                'enabled',
-                ___("Protect website access"),
-                array(
-                    'type'        => 'select',
-                    'options'     => array(0 => ___('No'), 1 => ___('Yes')),
-                    'value'       => $enabled,
-                    'help' => ___('If "Yes", authentication is necessary to access website.')
-                )
-            );
 
 
         /* Group list for restriction */
@@ -524,7 +418,7 @@ class Settings extends \EPFL\SettingsBase
 to work correctly. <br>Allows to restrict website access by forcing user to authenticate using
 <a href="https://github.com/epfl-sti/wordpress.plugin.tequila">Tequila</a>. <br>You can either only request and authentication,
 either force to be member of one of the defined groups (https://groups.epfl.ch).<br>
-If plugin is activated, <b>media files are also protected</b>.');
+If plugin is activated, website is protected and <b>media files are also protected</b>.');
         echo "</p>\n";
     }
 
@@ -547,3 +441,7 @@ If plugin is activated, <b>media files are also protected</b>.');
 
 
 Controller::getInstance()->hook();
+
+/* Do do some stuff when changing plugin state */
+register_activation_hook(__FILE__, array('EPFL\Intranet\Controller', 'activate'));
+register_deactivation_hook(__FILE__, array('EPFL\Intranet\Controller', 'deactivate'));
