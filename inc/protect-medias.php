@@ -8,7 +8,7 @@
     Normally, if plugin is deactivated, RewriteRule in .htaccess file redirection on present file
     is not present, so, checking plugin activation is useless. But, we do this in case of an
     inconsistency somewhere in the Matrix! */
-    $epfl_intranet_plugin_full_path = dirname(__FILE__). '/../epfl-intranet.php';
+    $epfl_intranet_plugin_full_path = 'epfl-intranet/epfl-intranet.php';
     if (is_plugin_active($epfl_intranet_plugin_full_path) && !is_user_logged_in())
     {
        $upload_dir = wp_upload_dir();
