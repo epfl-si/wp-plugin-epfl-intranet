@@ -90,7 +90,7 @@ class Controller
         // We try to update .htaccess file
         if(self::update_htaccess(array(), true)===false)
         {
-            die(___("Error deactivating EPFL-Intranet, impossible to update .htaccess file"));
+            throw new \Exception(___("Error deactivating EPFL-Intranet, impossible to update .htaccess file"));
         }
         error_log("EPFL-Intranet: deactivated");
     }
@@ -117,7 +117,7 @@ class Controller
         // We try to update .htaccess file
         if(self::update_htaccess($lines, true)===false)
         {
-            die(___("Error activating EPFL-Intranet, impossible to update .htaccess file\n"));
+            throw new \Exception(___("Error activating EPFL-Intranet, impossible to update .htaccess file\n"));
         }
         error_log("EPFL-Intranet: activated");
 
@@ -138,7 +138,7 @@ class Controller
         /* Accred Plugin missing */
         if(!is_plugin_active($accred_plugin_relative_path))
         {
-            die(___("Cannot activate plugin! EPFL-Accred plugin is not installed/activated\n"));
+            throw new \Exception(___("Cannot activate plugin! EPFL-Accred plugin is not installed/activated\n"));
         }
         else /* Accred plugin present */
         {
@@ -148,7 +148,7 @@ class Controller
             /* Check if version is 'vpsi' */
             if(preg_match('/\(vpsi\)\s*$/', $plugin_data['Version'])!==1)
             {
-                die(___("Cannot activate plugin!This is not 'vpsi' version of EPFL-Accred plugin which is installed\n"));
+                throw new \Exception(___("Cannot activate plugin!This is not 'vpsi' version of EPFL-Accred plugin which is installed\n"));
             }
             else /* It's VPSI version */
             {
@@ -163,7 +163,7 @@ class Controller
                 /* Check min version */
                 if(floatval($output[1]) < $accred_min_version)
                 {
-                    die(sprintf(___("Cannot activate plugin! EPFL-Accred 'vpsi' plugin version must be at least %s (version %s installed)\n"),
+                    throw new \Exception(sprintf(___("Cannot activate plugin! EPFL-Accred 'vpsi' plugin version must be at least %s (version %s installed)\n"),
                                        $accred_min_version, $output[1]));
                 }
 
