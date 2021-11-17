@@ -140,35 +140,6 @@ class Controller
         {
             throw new \Exception(___("Cannot activate plugin! EPFL-Accred plugin is not installed/activated\n"));
         }
-        else /* Accred plugin present */
-        {
-            /* Getting data */
-            $plugin_data = get_plugin_data($accred_plugin_full_path);
-
-            /* Check if version is 'vpsi' */
-            if(preg_match('/\(vpsi\)\s*$/', $plugin_data['Version'])!==1)
-            {
-                throw new \Exception(___("Cannot activate plugin!This is not 'vpsi' version of EPFL-Accred plugin which is installed\n"));
-            }
-            else /* It's VPSI version */
-            {
-                /* Version is like:
-                0.11 (vpsi) */
-                preg_match('/^(\d+\.\d+)\s*\(vpsi\)\s*$/', $plugin_data['Version'], $output);
-
-                /* $output is array like :
-                array(0	=>	0.11 (vpsi)
-                      1	=>	0.11) */
-
-                /* Check min version */
-                if(floatval($output[1]) < $accred_min_version)
-                {
-                    throw new \Exception(sprintf(___("Cannot activate plugin! EPFL-Accred 'vpsi' plugin version must be at least %s (version %s installed)\n"),
-                                       $accred_min_version, $output[1]));
-                }
-
-            }
-        }
 
         return true;
     }
