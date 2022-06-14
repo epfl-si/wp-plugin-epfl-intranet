@@ -416,3 +416,22 @@ Controller::getInstance()->hook();
 /* Do do some stuff when changing plugin state */
 register_activation_hook(__FILE__, array('EPFL\Intranet\Controller', 'activate'));
 register_deactivation_hook(__FILE__, array('EPFL\Intranet\Controller', 'deactivate'));
+
+
+// Add endpoint to WordPress REST API -> /wp-json/epfl-intranet/v1/groups
+add_action( 'rest_api_init', function() {
+    register_rest_route( 'epfl-intranet/v1', 'groups', array(
+        'method'   => 'WP_REST_Server::READABLE',
+        'callback' => __NAMESPACE__ . '\\get_epfl_intranet_groups',
+    ) );
+} );
+
+function get_epfl_intranet_groups() {
+    $restrict_to_groups = get_option('plugin:epfl_intranet:restrict_to_groups');
+    $groups = explode(',', $restrict_to_groups);
+    $data = [];
+    foreach ($groups as $group) {
+        array_push($data, array('group_name' => $group));
+    }
+    return $data;
+}
