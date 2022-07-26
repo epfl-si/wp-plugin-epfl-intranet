@@ -2,7 +2,7 @@
     require_once(dirname($_SERVER["SCRIPT_FILENAME"], 5) . '/wp-load.php');
 
 
-    
+
 
     /* We redirect on login page only if plugin is active. Otherwise there's no protection.
     Normally, if plugin is deactivated, RewriteRule in .htaccess file redirection on present file
@@ -19,7 +19,7 @@
 
     list($basedir) = array_values(array_intersect_key(wp_upload_dir(), array('basedir' => 1)))+array(NULL);
 
-    $file = rtrim($basedir,'/').'/'.str_replace('..', '', isset($_GET[ 'file' ])?$_GET[ 'file' ]:'');
+    $file = rtrim($basedir,'/').'/'.str_replace('../', '', isset($_GET[ 'file' ])?$_GET[ 'file' ]:'');
     if (!$basedir || !is_file($file))
     {
        status_header(404);
