@@ -2,9 +2,8 @@
 /*
  * Plugin Name: EPFL Intranet
  * Description: Use EPFL Accred to allow website access only to specific group(s) or just force to be authenticated
- * Version:     0.20
- * Author:      Lucien Chaboudez
- * Author URI:  mailto:lucien.chaboudez@epfl.ch
+ * Version:     1.0.0
+ * Author:      EPFL SI
  */
 
 namespace EPFL\Intranet;
@@ -170,7 +169,7 @@ class Settings extends \EPFL\SettingsBase
             require_once(dirname(__FILE__) . "/inc/protect-site.php");
         }
 
-        if ( defined( 'WP_CLI' ) && WP_CLI ) 
+        if ( defined( 'WP_CLI' ) && WP_CLI )
         {
             \WP_CLI::add_command('epfl intranet status', [get_called_class(), 'wp_cli_status' ]);
             \WP_CLI::add_command('epfl intranet update-protection', [get_called_class(), 'wp_cli_update_protection' ]);
@@ -183,7 +182,7 @@ class Settings extends \EPFL\SettingsBase
 
         $this->debug("-> show_plugin_status");
         /* Website is private by default if plugin is activated */
-        
+
         /* If visiting admin console  */
         if(is_admin())
         {
@@ -261,7 +260,7 @@ class Settings extends \EPFL\SettingsBase
 
     /***************************************************************************************/
     /*********************************** WP CLI Commands ***********************************/
-    
+
 
     /**
      * Update site protection
@@ -283,14 +282,14 @@ class Settings extends \EPFL\SettingsBase
     function wp_cli_status()
     {
         $msg = "Protection is enabled";
-        
+
         $restricted_to_groups = $this->get('restrict_to_groups');
 
         if($restricted_to_groups != "")
         {
             $msg .= " and restricted to group(s) ".$restricted_to_groups;
         }
-    
+
         \WP_CLI::success($msg);
     }
 
@@ -299,12 +298,12 @@ class Settings extends \EPFL\SettingsBase
 
     /*********************************** WP CLI Commands ***********************************/
     /***************************************************************************************/
-    
+
 
 
     /**
      * Change site protection status
-     * 
+     *
      * @param String $restrict_to_groups -> List of groups to restrict access to (separated by ,)
      */
     function change_protection_config($restrict_to_groups)
@@ -312,7 +311,7 @@ class Settings extends \EPFL\SettingsBase
         // Checking if entered groups are correct
         if($this->validate_restrict_to_groups($restrict_to_groups) == $restrict_to_groups)
         {
-            
+
             $this->update('restrict_to_groups', $restrict_to_groups);
 
             $msg = "Site protection successfully updated";
@@ -322,12 +321,12 @@ class Settings extends \EPFL\SettingsBase
         }
         else
         {
-            \WP_CLI::error("Incorrect group(s) provided", true);    
+            \WP_CLI::error("Incorrect group(s) provided", true);
         }
 
     }
 
-    
+
 
 
 
@@ -342,7 +341,7 @@ class Settings extends \EPFL\SettingsBase
 
         /* All group have access, Accred plugin will handle this*/
         $epfl_accred_group = (empty(trim($restrict_to_groups))) ? '*': $restrict_to_groups;
-   
+
         $this->debug("Access restricted to: ". var_export($epfl_accred_group, true));
 
         /* We update subscribers group for EPFL Accred plugin to allow everyone */
@@ -353,7 +352,7 @@ class Settings extends \EPFL\SettingsBase
     }
 
 
-    
+
 
     /**
      * Prepare the admin menu with settings and their values
