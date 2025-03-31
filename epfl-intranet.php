@@ -2,7 +2,7 @@
 /*
  * Plugin Name: EPFL Intranet
  * Description: Use EPFL Accred to allow website access only to specific group(s) or just force to be authenticated
- * Version:     1.0.0
+ * Version:     1.1.0
  * Author:      EPFL SI
  */
 
@@ -82,45 +82,7 @@ class Controller
     }
 
 
-
-    static function deactivate()
-    {
-        error_log("EPFL-Intranet: deactivating...");
-        // We try to update .htaccess file
-        if(self::update_htaccess(array(), true)===false)
-        {
-            throw new \Exception(___("Error deactivating EPFL-Intranet, impossible to update .htaccess file"));
-        }
-        error_log("EPFL-Intranet: deactivated");
-    }
-
-    /**
-    * Validate activation/deactivation. In fact we just add things into .htaccess file to protect medias.
-    */
-    static function activate()
-    {
-        error_log("EPFL-Intranet: activating...");
-
-        /* If prerequisite are not met, */
-        self::check_prerequisites();
-
-        $lines = array();
-
-        $lines[] = "RewriteEngine On";
-        // if requested URL is in media folder,
-        $lines[] = "RewriteCond %{REQUEST_URI} wp-content/uploads/";
-
-        // We redirect on a file which will check if logged in (we add path to requested file as parameter
-        $lines[] = "RewriteRule wp-content/uploads/(.*)$ wp-content/plugins/epfl-intranet/inc/protect-medias.php?file=$1 [QSA,L]";
-
-        // We try to update .htaccess file
-        if(self::update_htaccess($lines, true)===false)
-        {
-            throw new \Exception(___("Error activating EPFL-Intranet, impossible to update .htaccess file\n"));
-        }
-        error_log("EPFL-Intranet: activated");
-
-    }
+ 
 
     /**
     * Check if all dependencies are present
@@ -328,8 +290,6 @@ class Settings extends \EPFL\SettingsBase
 
 
 
-
-
     /**
     * Validate entered group list for which to restrict access
     */
@@ -411,11 +371,6 @@ If plugin is activated, website is protected and <b>media files are also protect
 
 
 Controller::getInstance()->hook();
-
-/* Do do some stuff when changing plugin state */
-register_activation_hook(__FILE__, array('EPFL\Intranet\Controller', 'activate'));
-register_deactivation_hook(__FILE__, array('EPFL\Intranet\Controller', 'deactivate'));
-
 
 // Add endpoint to WordPress REST API -> /wp-json/epfl-intranet/v1/groups
 add_action( 'rest_api_init', function() {

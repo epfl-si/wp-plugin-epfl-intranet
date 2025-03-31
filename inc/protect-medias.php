@@ -1,25 +1,20 @@
 <?PHP
-    require_once(dirname($_SERVER["SCRIPT_FILENAME"], 5) . '/wp-load.php');
+    require_once('/wp/6/wp-load.php');
 
+    $upload_dir = wp_upload_dir();
 
-
-
-    /* We redirect on login page only if plugin is active. Otherwise there's no protection.
-    Normally, if plugin is deactivated, RewriteRule in .htaccess file redirection on present file
-    is not present, so, checking plugin activation is useless. But, we do this in case of an
-    inconsistency somewhere in the Matrix! */
     $epfl_intranet_plugin_full_path = 'epfl-intranet/epfl-intranet.php';
-    if (is_plugin_active($epfl_intranet_plugin_full_path) && !is_user_logged_in())
+    if (!is_user_logged_in())
     {
-       $upload_dir = wp_upload_dir();
-       wp_redirect( wp_login_url( $upload_dir['baseurl'] . '/' . $_GET[ 'file' ]));
+       $file = str_replace($_SERVER["WP_ROOT_URI"] . 'wp-content/uploads', '', $_SERVER['REQUEST_URI']);
+       wp_redirect( wp_login_url( $upload_dir['baseurl'] . $file));
        exit();
-
     }
 
     list($basedir) = array_values(array_intersect_key(wp_upload_dir(), array('basedir' => 1)))+array(NULL);
 
-    $file = rtrim($basedir,'/').'/'.str_replace('../', '', isset($_GET[ 'file' ])?$_GET[ 'file' ]:'');
+    $file = str_replace($_SERVER["WP_ROOT_URI"] . 'wp-content/uploads', $upload_dir["basedir"], $_SERVER['REQUEST_URI']);
+
     if (!$basedir || !is_file($file))
     {
        status_header(404);
