@@ -12,7 +12,8 @@
 
     list($basedir) = array_values(array_intersect_key(wp_upload_dir(), array('basedir' => 1)))+array(NULL);
 
-    $file = str_replace($_SERVER["WP_ROOT_URI"] . 'wp-content/uploads',  wp_upload_dir(), $_SERVER['REQUEST_URI']);
+    $upload_dir = wp_upload_dir();
+    $file = str_replace($_SERVER["WP_ROOT_URI"] . 'wp-content/uploads', $upload_dir["basedir"], $_SERVER['REQUEST_URI']);
 
     if (!$basedir || !is_file($file))
     {
