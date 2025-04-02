@@ -1,4 +1,4 @@
-<?PHP
+<?php
     require_once('/wp/6/wp-load.php');
 
     $upload_dir = wp_upload_dir();
@@ -63,5 +63,3 @@
 
     // If we made it this far, just serve the file
     readfile( $file );
-
-?>
