@@ -31,9 +31,8 @@
        $mimetype = 'image/' . substr( $file, strrpos( $file, '.' ) + 1 );
 
 
-    header( 'Content-Type: ' . $mimetype ); // always send this
-    if ( false === strpos( $_SERVER['SERVER_SOFTWARE'], 'Microsoft-IIS' ) )
-       header( 'Content-Length: ' . filesize( $file ) );
+    header( 'Content-Type: ' . $mimetype );
+    header( 'Content-Length: ' . filesize( $file ) );
 
     $last_modified = gmdate( 'D, d M Y H:i:s', filemtime( $file ) );
     $etag = '"'. md5( $last_modified ) . '"';
