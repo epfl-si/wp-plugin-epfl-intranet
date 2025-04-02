@@ -12,8 +12,13 @@
     }
 
     list($basedir) = array_values(array_intersect_key(wp_upload_dir(), array('basedir' => 1)))+array(NULL);
-
-    $file = str_replace($_SERVER["WP_ROOT_URI"] . 'wp-content/uploads', $upload_dir["basedir"], $_SERVER['REQUEST_URI']);
+    $file = str_replace($_SERVER["WP_ROOT_URI"] . 'wp-content/uploads', $upload_dir["basedir"], urldecode($_SERVER['REQUEST_URI']));
+    if ( (strpos($file, "/../") !== FALSE) ||
+         (strpos($file, "../") === 0) )
+    {
+       status_header(403);
+       die('403 — Try harder');
+    }
 
     if (!$basedir || !is_file($file))
     {
