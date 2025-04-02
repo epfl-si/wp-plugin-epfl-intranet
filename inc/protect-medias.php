@@ -1,4 +1,4 @@
-<?PHP
+<?php
     require_once('/wp/6/wp-load.php');
 
     $upload_dir = wp_upload_dir();
@@ -12,8 +12,13 @@
     }
 
     list($basedir) = array_values(array_intersect_key(wp_upload_dir(), array('basedir' => 1)))+array(NULL);
-
-    $file = str_replace($_SERVER["WP_ROOT_URI"] . 'wp-content/uploads', $upload_dir["basedir"], $_SERVER['REQUEST_URI']);
+    $file = str_replace($_SERVER["WP_ROOT_URI"] . 'wp-content/uploads', $upload_dir["basedir"], urldecode($_SERVER['REQUEST_URI']));
+    if ( (strpos($file, "/../") !== FALSE) ||
+         (strpos($file, "../") === 0) )
+    {
+       status_header(403);
+       die('403 — Try harder');
+    }
 
     if (!$basedir || !is_file($file))
     {
@@ -31,9 +36,8 @@
        $mimetype = 'image/' . substr( $file, strrpos( $file, '.' ) + 1 );
 
 
-    header( 'Content-Type: ' . $mimetype ); // always send this
-    if ( false === strpos( $_SERVER['SERVER_SOFTWARE'], 'Microsoft-IIS' ) )
-       header( 'Content-Length: ' . filesize( $file ) );
+    header( 'Content-Type: ' . $mimetype );
+    header( 'Content-Length: ' . filesize( $file ) );
 
     $last_modified = gmdate( 'D, d M Y H:i:s', filemtime( $file ) );
     $etag = '"'. md5( $last_modified ) . '"';
@@ -64,5 +68,3 @@
 
     // If we made it this far, just serve the file
     readfile( $file );
-
-?>
