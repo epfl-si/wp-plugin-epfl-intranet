@@ -81,3 +81,4 @@
 
     // If we made it this far, just serve the file
     readfile( $file );
+    exit(0);
