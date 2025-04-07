@@ -12,7 +12,8 @@
     }
 
     list($basedir) = array_values(array_intersect_key(wp_upload_dir(), array('basedir' => 1)))+array(NULL);
-    $file = str_replace($_SERVER["WP_ROOT_URI"] . 'wp-content/uploads', $upload_dir["basedir"], urldecode($_SERVER['REQUEST_URI']));
+    $url_path_without_query_string = parse_url( urldecode( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH );
+    $file = str_replace( $_SERVER['WP_ROOT_URI'] . 'wp-content/uploads', $upload_dir['basedir'], $url_path_without_query_string );
     if ( (strpos($file, "/../") !== FALSE) ||
          (strpos($file, "../") === 0) )
     {
