@@ -4,24 +4,11 @@
     $upload_dir = wp_upload_dir();
 
     $epfl_intranet_plugin_full_path = 'epfl-intranet/epfl-intranet.php';
-    if (!is_user_logged_in())
-    {
-       // Specific authorization for Search Inside crawler
-       if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
-          $authHeader = $_SERVER['HTTP_AUTHORIZATION'];
-          if (str_starts_with($authHeader, 'Basic ')) {
-             $encodedCredentials = substr($authHeader, 6);
-             $decodedCredentials = base64_decode($encodedCredentials);
-             if (password_verify($decodedCredentials, getenv('SEARCH_INSIDE_WP_API_HASHED_TOKEN'))){
-                $search_crawler_authenticated = true;
-             }
-          }
-       }
-       if (!isset($search_crawler_authenticated)) {
+    $search_crawler_authenticated = check_http_basic_auth(getenv('SEARCH_INSIDE_WP_API_HASHED_TOKEN'));
+    if ( ! (is_user_logged_in() || $search_crawler_authenticated) ) {
           $file = str_replace($_SERVER["WP_ROOT_URI"] . 'wp-content/uploads', '', $_SERVER['REQUEST_URI']);
           wp_redirect( wp_login_url( $upload_dir['baseurl'] . $file));
           exit();
-       }
     }
 
     list($basedir) = array_values(array_intersect_key(wp_upload_dir(), array('basedir' => 1)))+array(NULL);
@@ -81,3 +68,19 @@
 
     // If we made it this far, just serve the file
     readfile( $file );
+
+    function check_http_basic_auth ($htpasswd_line) {
+        if (! $htpasswd_line) {
+            return false;
+        }
+        // Specific authorization for Search Inside crawler
+        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        if (str_starts_with($authHeader, 'Basic ')) {
+            $encodedCredentials = substr($authHeader, 6);
+            $decodedCredentials = base64_decode($encodedCredentials);
+            if (password_verify($decodedCredentials, $htpasswd_line)) {
+                return true;
+            }
+        }
+        return false;
+    }
