@@ -2,7 +2,7 @@
 /*
  * Plugin Name: EPFL Intranet
  * Description: Use EPFL Accred to allow website access only to specific group(s) or just force to be authenticated
- * Version:     1.2.0
+ * Version:     1.3.0
  * Author:      EPFL SI
  */
 
