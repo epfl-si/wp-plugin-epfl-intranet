@@ -27,10 +27,8 @@ add_action( 'get_header', 'epfl_intranet_force_login' );
  * @return   NULL                Nothing is returned
  */
 function epfl_intranet_force_login() {
-    error_log("EPFL-intranet: -> epfl_intranet_force_login");
 	/* If user is logged in, we can exit */
 	if (is_user_logged_in() ) {
-	  error_log("EPFL-intranet: already logged in");
 		return;
 	}
 
