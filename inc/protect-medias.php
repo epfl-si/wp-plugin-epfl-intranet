@@ -1,5 +1,5 @@
 <?php
-    require_once('/wp/6/wp-load.php');
+    require_once('/wp/wp-load.php');
 
     $upload_dir = wp_upload_dir();
 
