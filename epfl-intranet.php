@@ -116,8 +116,8 @@ class Settings extends \EPFL\SettingsBase
     {
         parent::hook();
         $this->add_options_page(
-	        ___('Intranet settings'),    // $page_title
-            ___('EPFL Intranet'),        // $menu_title
+	        'Intranet settings',    // $page_title
+            'EPFL Intranet',        // $menu_title
             'manage_options');           // $capability
 
         add_action('admin_init', array($this, 'setup_options_page'));
