@@ -153,7 +153,7 @@ class Settings extends \EPFL\SettingsBase
             /* Only authentication needed*/
             if($restricted_to_groups == "*")
             {
-                $restrict_message = ___("Website access needs Tequila/Gaspar authentication");
+                $restrict_message = ___("Website access needs Entra ID/Gaspar authentication");
             }
             else /* Authentication AND authorization needed*/
             {
@@ -346,7 +346,7 @@ class Settings extends \EPFL\SettingsBase
         echo "<p>\n";
         echo ___('Needs <a href="https://github.com/epfl-sti/wordpress.plugin.accred/tree/vpsi">EPFL-Accred</a> (VPSI version) plugin
 to work correctly. <br>Allows to restrict website access by forcing user to authenticate using
-<a href="https://github.com/epfl-sti/wordpress.plugin.tequila">Tequila</a>. <br>You can either only request and authentication,
+<a href="https://github.com/epfl-si/openid-connect-generic">Entra ID</a>. <br>You can either only request and authentication,
 either force to be member of one of the defined groups (https://groups.epfl.ch).<br>
 If plugin is activated, website is protected and <b>media files are also protected</b>.');
         echo "</p>\n";
